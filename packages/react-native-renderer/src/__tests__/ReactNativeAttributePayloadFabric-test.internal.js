@@ -102,6 +102,14 @@ describe('ReactNativeAttributePayloadFabric.create', () => {
     expect(processA).toBeCalledWith(2);
   });
 
+  it('should use the process attribute for functions as well', () => {
+    const process = x => x;
+    const nextFunction = () => {};
+    expect(create({a: nextFunction}, {a: {process}})).toEqual({
+      a: nextFunction,
+    });
+  });
+
   it('should work with undefined styles', () => {
     expect(create({style: undefined}, {style: {b: true}})).toEqual(null);
     expect(create({style: {a: '#ffffff', b: 1}}, {style: {b: true}})).toEqual({
@@ -210,7 +218,6 @@ describe('ReactNativeAttributePayloadFabric.diff', () => {
     expect(diff({a: 1}, {b: 2}, {})).toEqual(null);
   });
 
-  // @gate !enableShallowPropDiffing
   it('should use the diff attribute', () => {
     const diffA = jest.fn((a, b) => true);
     const diffB = jest.fn((a, b) => false);
@@ -235,7 +242,6 @@ describe('ReactNativeAttributePayloadFabric.diff', () => {
     expect(diffB).not.toBeCalled();
   });
 
-  // @gate !enableShallowPropDiffing
   it('should do deep diffs of Objects by default', () => {
     expect(
       diff(
@@ -433,7 +439,6 @@ describe('ReactNativeAttributePayloadFabric.diff', () => {
     ).toEqual(null);
   });
 
-  // @gate !enableShallowPropDiffing
   it('should skip deeply-nested changed functions', () => {
     expect(
       diff(
@@ -454,5 +459,22 @@ describe('ReactNativeAttributePayloadFabric.diff', () => {
         {wrapper: true},
       ),
     ).toEqual(null);
+  });
+
+  it('should use the process function config when prop is a function', () => {
+    const process = jest.fn(a => a);
+    const nextFunction = function () {};
+    expect(
+      diff(
+        {
+          a: function () {},
+        },
+        {
+          a: nextFunction,
+        },
+        {a: {process}},
+      ),
+    ).toEqual({a: nextFunction});
+    expect(process).toBeCalled();
   });
 });

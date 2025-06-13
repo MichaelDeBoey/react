@@ -14,11 +14,6 @@ import {
 } from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
 import isArray from 'shared/isArray';
 
-import {
-  enableShallowPropDiffing,
-  enableFastAddPropertiesInDiffing,
-} from 'shared/ReactFeatureFlags';
-
 import type {AttributeConfiguration} from './ReactNativeTypes';
 
 const emptyObject = {};
@@ -141,12 +136,12 @@ function diffNestedArrayProperty(
     );
   }
   for (; i < nextArray.length; i++) {
-    // Add all remaining properties.
-    updatePayload = addNestedProperty(
-      updatePayload,
-      nextArray[i],
-      validAttributes,
-    );
+    // Add all remaining properties
+    const nextProp = nextArray[i];
+    if (!nextProp) {
+      continue;
+    }
+    updatePayload = addNestedProperty(updatePayload, nextProp, validAttributes);
   }
   return updatePayload;
 }
@@ -206,41 +201,6 @@ function diffNestedProperty(
 }
 
 /**
- * addNestedProperty takes a single set of props and valid attribute
- * attribute configurations. It processes each prop and adds it to the
- * updatePayload.
- */
-function addNestedProperty(
-  updatePayload: null | Object,
-  nextProp: NestedNode,
-  validAttributes: AttributeConfiguration,
-): $FlowFixMe {
-  if (!nextProp) {
-    return updatePayload;
-  }
-
-  if (enableFastAddPropertiesInDiffing) {
-    return fastAddProperties(updatePayload, nextProp, validAttributes);
-  }
-
-  if (!isArray(nextProp)) {
-    // Add each property of the leaf.
-    return slowAddProperties(updatePayload, nextProp, validAttributes);
-  }
-
-  for (let i = 0; i < nextProp.length; i++) {
-    // Add all the properties of the array.
-    updatePayload = addNestedProperty(
-      updatePayload,
-      nextProp[i],
-      validAttributes,
-    );
-  }
-
-  return updatePayload;
-}
-
-/**
  * clearNestedProperty takes a single set of props and valid attributes. It
  * adds a null sentinel to the updatePayload, for each prop key.
  */
@@ -294,14 +254,19 @@ function diffProperties(
     prevProp = prevProps[propKey];
     nextProp = nextProps[propKey];
 
-    // functions are converted to booleans as markers that the associated
-    // events should be sent from native.
     if (typeof nextProp === 'function') {
-      nextProp = (true: any);
-      // If nextProp is not a function, then don't bother changing prevProp
-      // since nextProp will win and go into the updatePayload regardless.
-      if (typeof prevProp === 'function') {
-        prevProp = (true: any);
+      const attributeConfigHasProcess =
+        typeof attributeConfig === 'object' &&
+        typeof attributeConfig.process === 'function';
+      if (!attributeConfigHasProcess) {
+        // functions are converted to booleans as markers that the associated
+        // events should be sent from native.
+        nextProp = (true: any);
+        // If nextProp is not a function, then don't bother changing prevProp
+        // since nextProp will win and go into the updatePayload regardless.
+        if (typeof prevProp === 'function') {
+          prevProp = (true: any);
+        }
       }
     }
 
@@ -349,7 +314,7 @@ function diffProperties(
     // Pattern match on: attributeConfig
     if (typeof attributeConfig !== 'object') {
       // case: !Object is the default case
-      if (enableShallowPropDiffing || defaultDiffer(prevProp, nextProp)) {
+      if (defaultDiffer(prevProp, nextProp)) {
         // a normal leaf has changed
         (updatePayload || (updatePayload = ({}: {[string]: $FlowFixMe})))[
           propKey
@@ -361,7 +326,6 @@ function diffProperties(
     ) {
       // case: CustomAttributeConfiguration
       const shouldUpdate =
-        enableShallowPropDiffing ||
         prevProp === undefined ||
         (typeof attributeConfig.diff === 'function'
           ? attributeConfig.diff(prevProp, nextProp)
@@ -452,7 +416,7 @@ function diffProperties(
   return updatePayload;
 }
 
-function fastAddProperties(
+function addNestedProperty(
   payload: null | Object,
   props: Object,
   validAttributes: AttributeConfiguration,
@@ -460,7 +424,7 @@ function fastAddProperties(
   // Flatten nested style props.
   if (isArray(props)) {
     for (let i = 0; i < props.length; i++) {
-      payload = fastAddProperties(payload, props[i], validAttributes);
+      payload = addNestedProperty(payload, props[i], validAttributes);
     }
     return payload;
   }
@@ -485,18 +449,22 @@ function fastAddProperties(
       } else {
         continue;
       }
-    } else if (typeof prop === 'function') {
-      // A function prop. It represents an event handler. Pass it to native as 'true'.
-      newValue = true;
-    } else if (typeof attributeConfig !== 'object') {
-      // An atomic prop. Doesn't need to be flattened.
-      newValue = prop;
-    } else if (typeof attributeConfig.process === 'function') {
-      // An atomic prop with custom processing.
-      newValue = attributeConfig.process(prop);
-    } else if (typeof attributeConfig.diff === 'function') {
-      // An atomic prop with custom diffing. We don't need to do diffing when adding props.
-      newValue = prop;
+    } else if (typeof attributeConfig === 'object') {
+      if (typeof attributeConfig.process === 'function') {
+        // An atomic prop with custom processing.
+        newValue = attributeConfig.process(prop);
+      } else if (typeof attributeConfig.diff === 'function') {
+        // An atomic prop with custom diffing. We don't need to do diffing when adding props.
+        newValue = prop;
+      }
+    } else {
+      if (typeof prop === 'function') {
+        // A function prop. It represents an event handler. Pass it to native as 'true'.
+        newValue = true;
+      } else {
+        // An atomic prop. Doesn't need to be flattened.
+        newValue = prop;
+      }
     }
 
     if (newValue !== undefined) {
@@ -507,21 +475,10 @@ function fastAddProperties(
       continue;
     }
 
-    payload = fastAddProperties(payload, prop, attributeConfig);
+    payload = addNestedProperty(payload, prop, attributeConfig);
   }
 
   return payload;
-}
-
-/**
- * addProperties adds all the valid props to the payload after being processed.
- */
-function slowAddProperties(
-  updatePayload: null | Object,
-  props: Object,
-  validAttributes: AttributeConfiguration,
-): null | Object {
-  return diffProperties(updatePayload, emptyObject, props, validAttributes);
 }
 
 /**
@@ -533,7 +490,6 @@ function clearProperties(
   prevProps: Object,
   validAttributes: AttributeConfiguration,
 ): null | Object {
-  // TODO: Fast path
   return diffProperties(updatePayload, prevProps, emptyObject, validAttributes);
 }
 
@@ -541,7 +497,7 @@ export function create(
   props: Object,
   validAttributes: AttributeConfiguration,
 ): null | Object {
-  return fastAddProperties(null, props, validAttributes);
+  return addNestedProperty(null, props, validAttributes);
 }
 
 export function diff(

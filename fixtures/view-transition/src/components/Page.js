@@ -18,6 +18,7 @@ import SwipeRecognizer from './SwipeRecognizer';
 import './Page.css';
 
 import transitions from './Transitions.module.css';
+import NestedReveal from './NestedReveal';
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -200,27 +201,48 @@ export default function Page({url, navigate}) {
                 <div>!!</div>
               </ViewTransition>
             </Activity>
-            <Suspense fallback="Loading">
+            <Suspense
+              fallback={
+                <ViewTransition>
+                  <div>
+                    <ViewTransition name="shared-reveal">
+                      <h2>█████</h2>
+                    </ViewTransition>
+                    <p>████</p>
+                    <p>███████</p>
+                    <p>████</p>
+                    <p>██</p>
+                    <p>██████</p>
+                    <p>███</p>
+                    <p>████</p>
+                  </div>
+                </ViewTransition>
+              }>
               <ViewTransition>
-                <p>these</p>
-                <p>rows</p>
-                <p>exist</p>
-                <p>to</p>
-                <p>test</p>
-                <p>scrolling</p>
-                <p>content</p>
-                <p>out</p>
-                <p>of</p>
-                {portal}
-                <p>the</p>
-                <p>viewport</p>
-                <Suspend />
+                <div>
+                  <p>these</p>
+                  <p>rows</p>
+                  <ViewTransition name="shared-reveal">
+                    <h2>exist</h2>
+                  </ViewTransition>
+                  <p>to</p>
+                  <p>test</p>
+                  <p>scrolling</p>
+                  <p>content</p>
+                  <p>out</p>
+                  <p>of</p>
+                  {portal}
+                  <p>the</p>
+                  <p>viewport</p>
+                  <Suspend />
+                </div>
               </ViewTransition>
             </Suspense>
             {show ? <Component /> : null}
           </div>
         </ViewTransition>
       </SwipeRecognizer>
+      <NestedReveal />
     </div>
   );
 }
